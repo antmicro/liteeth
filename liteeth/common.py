@@ -142,6 +142,22 @@ etherbone_record_header = Header(etherbone_record_header_fields,
                                  etherbone_record_header_length,
                                  swap_field_bytes=True)
 
+rtp_header_length = 12
+rtp_header_fields = {
+    "ver":              HeaderField(0,  6,  2),
+    "p":                HeaderField(0,  5,  1),
+    "x":                HeaderField(0,  4,  1),
+    "cc":               HeaderField(0,  0,  4),
+    "m":                HeaderField(1,  7,  1),
+    "pt":               HeaderField(1,  0,  7),
+    "sequence_number":  HeaderField(2,  0,  16),
+    "timestamp":        HeaderField(4,  0,  32),
+    "ssrc":             HeaderField(8,  0,  32)
+}
+rtp_header = Header(rtp_header_fields,
+                    rtp_header_length,
+                    swap_field_bytes=True)
+
 # layouts
 def _remove_from_layout(layout, *args):
     r = []
@@ -300,3 +316,11 @@ def eth_etherbone_mmap_description(dw):
 def eth_tty_description(dw):
     payload_layout = [("data", dw)]
     return EndpointDescription(payload_layout)
+
+def eth_rtp_description(dw):
+    param_layout = rtp_header.get_layout()
+    payload_layout = [
+        ("data", dw),
+        ("error", dw//8)
+    ]
+    return EndpointDescription(payload_layout, param_layout)
