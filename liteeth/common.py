@@ -154,19 +154,19 @@ rtp_header_fields = {
     "ts":               HeaderField(4,  0,  32),
     "ssrc":             HeaderField(8,  0,  32)
 }
-rtp_header = Header(rtp_header_fields,
-                    rtp_header_length,
-                    swap_field_bytes=True)
 
 rtp_jpeg_header_length = 8
 rtp_jpeg_header_fields = {
-    "type_specific": HeaderField(0, 0, 8),
-    "off":           HeaderField(1, 0, 24),
-    "type":          HeaderField(4, 0, 8),
-    "q":             HeaderField(5, 0, 8),
-    "width":         HeaderField(6, 0, 8),
-    "height":        HeaderField(7, 0, 8),
+    "type_specific": HeaderField(rtp_header_length+0, 0, 8),
+    "off":           HeaderField(rtp_header_length+1, 0, 24),
+    "type":          HeaderField(rtp_header_length+4, 0, 8),
+    "q":             HeaderField(rtp_header_length+5, 0, 8),
+    "width":         HeaderField(rtp_header_length+6, 0, 8),
+    "height":        HeaderField(rtp_header_length+7, 0, 8),
 }
+
+rtp_jpeg_header_length += rtp_header_length
+rtp_jpeg_header_fields.update(rtp_header_fields)
 
 rtp_jpeg_header = Header(rtp_jpeg_header_fields,
                          rtp_jpeg_header_length,
@@ -174,13 +174,14 @@ rtp_jpeg_header = Header(rtp_jpeg_header_fields,
 
 rtp_raw_header_length = 8
 rtp_raw_header_fields = {
-    "ext_seq":       HeaderField(0, 0,  16),
-    "length":        HeaderField(2, 0,  16),
-    "field":         HeaderField(4, 15, 1),
-    "line_no":       HeaderField(4, 0,  15),
-    "cont":          HeaderField(6, 15, 1),
-    "offset":        HeaderField(6, 0,  15),
+    "ext_seq":       HeaderField(rtp_header_length+0, 0,  16),
+    "length":        HeaderField(rtp_header_length+2, 0,  16),
+    "line_no":       HeaderField(rtp_header_length+4, 0,  16),
+    "offset":        HeaderField(rtp_header_length+6, 0,  16),
 }
+
+rtp_raw_header_length += rtp_header_length
+rtp_raw_header_fields.update(rtp_header_fields)
 
 rtp_raw_header = Header(rtp_raw_header_fields,
                         rtp_raw_header_length,
@@ -344,14 +345,6 @@ def eth_etherbone_mmap_description(dw):
 def eth_tty_description(dw):
     payload_layout = [("data", dw)]
     return EndpointDescription(payload_layout)
-
-def eth_rtp_description(dw):
-    param_layout = rtp_header.get_layout()
-    payload_layout = [
-        ("data", dw),
-        ("error", dw//8)
-    ]
-    return EndpointDescription(payload_layout, param_layout)
 
 def eth_rtp_jpeg_description(dw):
     param_layout = rtp_jpeg_header.get_layout()
