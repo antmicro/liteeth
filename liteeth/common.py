@@ -150,13 +150,41 @@ rtp_header_fields = {
     "cc":               HeaderField(0,  0,  4),
     "m":                HeaderField(1,  7,  1),
     "pt":               HeaderField(1,  0,  7),
-    "sequence_number":  HeaderField(2,  0,  16),
-    "timestamp":        HeaderField(4,  0,  32),
+    "seq":              HeaderField(2,  0,  16),
+    "ts":               HeaderField(4,  0,  32),
     "ssrc":             HeaderField(8,  0,  32)
 }
 rtp_header = Header(rtp_header_fields,
                     rtp_header_length,
                     swap_field_bytes=True)
+
+rtp_jpeg_header_length = 8
+rtp_jpeg_header_fields = {
+    "type_specific": HeaderField(0, 0, 8),
+    "off":           HeaderField(1, 0, 24),
+    "type":          HeaderField(4, 0, 8),
+    "q":             HeaderField(5, 0, 8),
+    "width":         HeaderField(6, 0, 8),
+    "height":        HeaderField(7, 0, 8),
+}
+
+rtp_jpeg_header = Header(rtp_jpeg_header_fields,
+                         rtp_jpeg_header_length,
+                         swap_field_bytes=True)
+
+rtp_raw_header_length = 8
+rtp_raw_header_fields = {
+    "ext_seq":       HeaderField(0, 0,  16),
+    "length":        HeaderField(2, 0,  16),
+    "field":         HeaderField(4, 15, 1),
+    "line_no":       HeaderField(4, 0,  15),
+    "cont":          HeaderField(6, 15, 1),
+    "offset":        HeaderField(6, 0,  15),
+}
+
+rtp_raw_header = Header(rtp_raw_header_fields,
+                        rtp_raw_header_length,
+                        swap_field_bytes=True)
 
 # layouts
 def _remove_from_layout(layout, *args):
@@ -319,6 +347,22 @@ def eth_tty_description(dw):
 
 def eth_rtp_description(dw):
     param_layout = rtp_header.get_layout()
+    payload_layout = [
+        ("data", dw),
+        ("error", dw//8)
+    ]
+    return EndpointDescription(payload_layout, param_layout)
+
+def eth_rtp_jpeg_description(dw):
+    param_layout = rtp_jpeg_header.get_layout()
+    payload_layout = [
+        ("data", dw),
+        ("error", dw//8)
+    ]
+    return EndpointDescription(payload_layout, param_layout)
+
+def eth_rtp_raw_description(dw):
+    param_layout = rtp_raw_header.get_layout()
     payload_layout = [
         ("data", dw),
         ("error", dw//8)
