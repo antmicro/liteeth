@@ -165,12 +165,16 @@ class LiteEthMACCoreCrossbar(Module):
         # TX arbiter
         self.submodules.tx_arbiter_fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
+            wishbone_tx_fifo.source.ready.eq(1),
+            crossbar_tx_fifo.source.ready.eq(1),
             If(wishbone_tx_fifo.source.valid,
-                wishbone_tx_fifo.source.connect(core.sink),
+                wishbone_tx_fifo.source.ready.eq(0),
+                crossbar_tx_fifo.source.ready.eq(0),
                 NextState("WISHBONE")
             ).Else(
                 If(crossbar_tx_fifo.source.valid,
-                    crossbar_tx_fifo.source.connect(core.sink),
+                    wishbone_tx_fifo.source.ready.eq(0),
+                    crossbar_tx_fifo.source.ready.eq(0),
                     NextState("CROSSBAR")
                 )
             ),

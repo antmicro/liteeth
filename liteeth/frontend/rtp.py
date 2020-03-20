@@ -26,12 +26,12 @@ class LiteEthRTPTXJPEG(Module):
         self.source                = source     = packetizer.source
 
 class LiteEthRTPTXRAW(Module):
-    def __init__(self, ssrc, pkt_size=1024, width=1280, height=720, bpp=2):
+    def __init__(self, ssrc, pkt_size=1024, width=1024, height=768, bpp=2):
         self.submodules.fifo       = fifo       = stream.SyncFIFO([("data", 8)], 2048)
         self.submodules.packetizer = packetizer = LiteEthRTPRAWPacketizer(8)
         self.submodules.fsm        = fsm        = FSM(reset_state="IDLE")
         self.sink                  = sink       = stream.Endpoint([("data", 8)])
-        self.source                = source     = packetizer.source
+        self.source                = source     = stream.Endpoint(eth_udp_user_description(8))
 
         line_pos   = Signal(16)
         line_cnt   = Signal(16)
@@ -40,7 +40,8 @@ class LiteEthRTPTXRAW(Module):
         tx_len     = Signal(16)
         frame_end  = Signal()
 
-        cnt        = Signal(32)
+        cnt        = Signal(16)
+        cnt_khz    = Signal(32)
         ts         = Signal(32)
         sequence   = Signal(32)
 
@@ -50,10 +51,18 @@ class LiteEthRTPTXRAW(Module):
                          target_len.eq(pkt_size)
                      )
 
-        self.sync += cnt.eq(cnt+1)
+        self.sync += [
+            cnt.eq(cnt+1),
+            If(cnt == 1111,
+                cnt_khz.eq(cnt_khz+1),
+                cnt.eq(0),
+            ),
+        ]
 
         fsm.act("IDLE",
+            sink.ready.eq(1),
             If(sink.valid,
+                sink.ready.eq(0),
                 NextState("RX"),
             )
         )
@@ -83,7 +92,7 @@ class LiteEthRTPTXRAW(Module):
                 If(frame_end,
                     NextValue(line_pos, 0),
                     NextValue(line_cnt, 0),
-                    NextValue(ts, cnt),
+                    NextValue(ts, cnt_khz),
                 ),
                 NextState("IDLE"),
             )
@@ -103,6 +112,7 @@ class LiteEthRTPTXRAW(Module):
             packetizer.sink.param.offset.eq(line_pos[1:]),
             packetizer.sink.param.line_no.eq(line_cnt),
             # UDP param
+            packetizer.source.connect(source),
             source.param.length.eq(tx_len+rtp_raw_header_length),
         ]
 
