@@ -296,7 +296,7 @@ class LiteEthEtherboneRecordSender(Module):
             )
         )
         fsm.act("SEND_DATA",
-            source.valid.eq(1),
+            source.valid.eq(fifo.source.valid),
             source.last.eq(fifo.source.last),
             source.last_be.eq(fifo.source.last_be),
             source.data.eq(fifo.source.data),
