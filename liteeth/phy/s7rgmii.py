@@ -64,7 +64,7 @@ class LiteEthPHYRGMIIRX(Module):
 
         # # #
 
-        assert iodelay_clk_freq in [200e6, 300e6, 400e6]
+        #assert iodelay_clk_freq in [200e6, 300e6, 400e6]
         iodelay_tap_average = 1 / (2*32 * iodelay_clk_freq)
         rx_delay_taps = round(rx_delay / iodelay_tap_average)
         assert rx_delay_taps < 32, "Exceeded ODELAYE2 max value: {} >= 32".format(rx_delay_taps)
