@@ -142,7 +142,7 @@ class LiteEthEtherboneProbe(Module):
         self.submodules.fifo = fifo = PacketFIFO(eth_etherbone_packet_user_description(32),
             payload_depth = 1,
             param_depth   = 1,
-            buffered      = False
+            buffered      = True
         )
         self.comb += sink.connect(fifo.sink)
 
@@ -377,13 +377,16 @@ class LiteEthEtherboneWishboneMaster(Module):
             )
         )
         fsm.act("WRITE_DATA",
-            bus.adr.eq(sink.addr),
-            bus.dat_w.eq(sink.data),
-            bus.sel.eq(sink.be),
-            bus.stb.eq(sink.valid),
-            bus.we.eq(1),
-            bus.cyc.eq(1),
+            NextValue(bus.adr,   sink.addr),
+            NextValue(bus.dat_w, sink.data),
+            NextValue(bus.sel,   sink.be),
+            NextValue(bus.stb,   sink.valid),
+            NextValue(bus.we,    1),
+            NextValue(bus.cyc,   1),
             If(bus.stb & bus.ack,
+                NextValue(bus.stb, 0),
+                NextValue(bus.we,  0),
+                NextValue(bus.cyc, 0),
                 sink.ready.eq(1),
                 If(sink.last,
                     NextState("IDLE")
@@ -391,11 +394,15 @@ class LiteEthEtherboneWishboneMaster(Module):
             )
         )
         fsm.act("READ_DATA",
-            bus.adr.eq(sink.addr),
-            bus.sel.eq(sink.be),
-            bus.stb.eq(sink.valid),
-            bus.cyc.eq(1),
+            NextValue(bus.adr,   sink.addr),
+            NextValue(bus.sel,   sink.be),
+            NextValue(bus.stb,   sink.valid),
+            NextValue(bus.we,    0),
+            NextValue(bus.cyc,   1),
             If(bus.stb & bus.ack,
+                NextValue(bus.stb, 0),
+                NextValue(bus.we,  0),
+                NextValue(bus.cyc, 0),
                 data_update.eq(1),
                 NextState("SEND_DATA")
             )
