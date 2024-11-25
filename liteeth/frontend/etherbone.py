@@ -33,7 +33,7 @@ class LiteEthEtherbonePacketPacketizer(Packetizer):
 
 
 class LiteEthEtherbonePacketTX(Module):
-    def __init__(self, udp_port):
+    def __init__(self, udp_port, mode="slave"):
         self.sink   = sink   = stream.Endpoint(eth_etherbone_packet_user_description(32))
         self.source = source = stream.Endpoint(eth_udp_user_description(32))
 
@@ -42,7 +42,8 @@ class LiteEthEtherbonePacketTX(Module):
         self.submodules.packetizer = packetizer = LiteEthEtherbonePacketPacketizer()
         self.comb += [
             sink.connect(packetizer.sink, keep={"valid", "last", "last_be", "ready", "data"}),
-            sink.connect(packetizer.sink, keep={"pf", "pr", "nr"}),
+            sink.connect(packetizer.sink, keep={"pf", "pr"}),
+            packetizer.sink.nr.eq((mode == "slave")),
             packetizer.sink.version.eq(etherbone_version),
             packetizer.sink.magic.eq(etherbone_magic),
             packetizer.sink.port_size.eq(32//8),
@@ -119,7 +120,7 @@ class LiteEthEtherbonePacketRX(Module):
 
 
 class LiteEthEtherbonePacket(Module):
-    def __init__(self, udp, udp_port, cd="sys"):
+    def __init__(self, udp, udp_port, cd="sys", mode="slave"):
         self.submodules.tx = tx = LiteEthEtherbonePacketTX(udp_port)
         self.submodules.rx = rx = LiteEthEtherbonePacketRX()
         udp_port = udp.crossbar.get_port(udp_port, dw=32, cd=cd)
@@ -363,15 +364,16 @@ class LiteEthEtherboneWishboneMaster(Module):
         # # #
 
         data_update = Signal()
+        write_record = Signal()
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            sink.ready.eq(1),
             If(sink.valid,
-                sink.ready.eq(0),
                 If(sink.we,
+                    NextValue(write_record, 1),
                     NextState("WRITE_DATA")
                 ).Else(
+                    NextValue(write_record, 0),
                     NextState("READ_DATA")
                 )
             )
@@ -387,10 +389,8 @@ class LiteEthEtherboneWishboneMaster(Module):
                 NextValue(bus.stb, 0),
                 NextValue(bus.we,  0),
                 NextValue(bus.cyc, 0),
-                sink.ready.eq(1),
-                If(sink.last,
-                    NextState("IDLE")
-                )
+                data_update.eq(1),
+                NextState("SEND_DATA")
             )
         )
         fsm.act("READ_DATA",
@@ -413,8 +413,11 @@ class LiteEthEtherboneWishboneMaster(Module):
                 "addr",
                 "count",
                 "be"}),
-            source.we.eq(1),
-            If(data_update, source.data.eq(bus.dat_r))
+            source.we.eq(~write_record),
+            If(data_update,
+                If(write_record, source.data.eq(0)
+                ).Else(source.data.eq(bus.dat_r))
+            )
         ]
         fsm.act("SEND_DATA",
             sink.connect(source, keep={"valid", "last", "last_be", "ready"}),
@@ -422,7 +425,8 @@ class LiteEthEtherboneWishboneMaster(Module):
                 If(source.last,
                     NextState("IDLE")
                 ).Else(
-                    NextState("READ_DATA")
+                    If(write_record, NextState("WRITE_DATA")
+                    ).Else(NextState("READ_DATA"))
                 )
             )
         )
@@ -490,7 +494,7 @@ class LiteEthEtherboneWishboneSlave(Module):
 class LiteEthEtherbone(Module):
     def __init__(self, udp, udp_port, mode="master", buffer_depth=4, cd="sys"):
         # Encode/encode etherbone packets
-        self.submodules.packet = packet = LiteEthEtherbonePacket(udp, udp_port, cd)
+        self.submodules.packet = packet = LiteEthEtherbonePacket(udp, udp_port, cd, mode)
 
         # Packets can be probe (etherbone discovering) or records with writes and reads
         self.submodules.probe  = probe = LiteEthEtherboneProbe()
