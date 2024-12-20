@@ -52,7 +52,7 @@ class LiteEthPHYRGMIITX(Module):
 
 
 class LiteEthPHYRGMIIRX(Module):
-    def __init__(self, pads, rx_delay=2e-9, usp=False):
+    def __init__(self, pads, rx_delay=2e-9, iodelay_clk_freq=300e6, usp=False):
         self.source = source = stream.Endpoint(eth_phy_description(8))
 
         # # #
@@ -74,7 +74,7 @@ class LiteEthPHYRGMIIRX(Module):
                 p_CASCADE          = "NONE",
                 p_DELAY_TYPE       = "FIXED",
                 p_DELAY_VALUE      = int(rx_delay*1e12),
-                p_REFCLK_FREQUENCY = 300.0,
+                p_REFCLK_FREQUENCY = iodelay_clk_freq/1e6,
                 p_DELAY_FORMAT     = "TIME",
                 p_UPDATE_MODE      = "ASYNC",
                 p_SIM_DEVICE       = "ULTRASCALE_PLUS" if usp else "ULTRASCALE",
@@ -113,7 +113,7 @@ class LiteEthPHYRGMIIRX(Module):
                     p_CASCADE          = "NONE",
                     p_DELAY_TYPE       = "FIXED",
                     p_DELAY_VALUE      = int(rx_delay*1e12),
-                    p_REFCLK_FREQUENCY = 300.0,
+                    p_REFCLK_FREQUENCY = iodelay_clk_freq/1e6,
                     p_UPDATE_MODE      = "ASYNC",
                     p_DELAY_FORMAT     = "TIME",
                     p_SIM_DEVICE       = "ULTRASCALE_PLUS" if usp else "ULTRASCALE",
@@ -155,7 +155,15 @@ class LiteEthPHYRGMIIRX(Module):
 
 
 class LiteEthPHYRGMIICRG(Module, AutoCSR):
-    def __init__(self, clock_pads, pads, with_hw_init_reset, tx_delay=2e-9):
+    def __init__(
+        self,
+        clock_pads,
+        pads,
+        with_hw_init_reset,
+        tx_delay=2e-9,
+        hw_reset_cycles=256,
+        usp=False
+    ):
         self._reset = CSRStorage()
 
         # # #
@@ -179,7 +187,10 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
         self.clock_domains.cd_eth_tx_delayed = ClockDomain(reset_less=True)
         tx_phase = 125e6*tx_delay*360
         assert tx_phase < 360
-        from litex.soc.cores.clock import USPLL
+        if usp:
+            from litex.soc.cores.clock import USPPLL as USPLL
+        else:
+            from litex.soc.cores.clock import USPLL
         self.submodules.pll = pll = USPLL()
         pll.register_clkin(ClockSignal("eth_rx"), 125e6)
         pll.create_clkout(self.cd_eth_tx, 125e6, with_reset=False)
@@ -203,7 +214,7 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
         # Reset
         self.reset = reset = Signal()
         if with_hw_init_reset:
-            self.submodules.hw_reset = LiteEthPHYHWReset()
+            self.submodules.hw_reset = LiteEthPHYHWReset(cycles=hw_reset_cycles)
             self.comb += reset.eq(self._reset.storage | self.hw_reset.reset)
         else:
             self.comb += reset.eq(self._reset.storage)
@@ -219,10 +230,14 @@ class LiteEthPHYRGMII(Module, AutoCSR):
     dw          = 8
     tx_clk_freq = 125e6
     rx_clk_freq = 125e6
-    def __init__(self, clock_pads, pads, with_hw_init_reset=True, tx_delay=2e-9, rx_delay=2e-9, usp=False):
-        self.submodules.crg = LiteEthPHYRGMIICRG(clock_pads, pads, with_hw_init_reset, tx_delay)
+    def __init__(self, clock_pads, pads, with_hw_init_reset=True, tx_delay=2e-9, rx_delay=2e-9,
+                 iodelay_clk_freq=300e6, hw_reset_cycles=256, usp=False):
+        self.submodules.crg = LiteEthPHYRGMIICRG(
+            clock_pads, pads, with_hw_init_reset, tx_delay, hw_reset_cycles, usp)
         self.submodules.tx  = ClockDomainsRenamer("eth_tx")(LiteEthPHYRGMIITX(pads))
-        self.submodules.rx  = ClockDomainsRenamer("eth_rx")(LiteEthPHYRGMIIRX(pads, rx_delay, usp))
+        self.submodules.rx  = ClockDomainsRenamer("eth_rx")(
+            LiteEthPHYRGMIIRX(pads, rx_delay, iodelay_clk_freq, usp)
+        )
         self.sink, self.source = self.tx.sink, self.rx.source
 
         if hasattr(pads, "mdc"):
